@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="author" content="ELHLAISSI Hicham">
+    <title>labyrinthe</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/underscore@1.12.0/underscore-min.js"></script>
+<!--    ressources-->
+    <!--    https://stackoverflow.com/questions/29699311/how-to-clear-canvas-html5-->
+<!--    http://java2s.com/Open-Source/Javascript_Free_CodeDownload/r/-->
+<!--    https://stackoverflow.com/questions/38502/whats-a-good-algorithm-to-generate-a-maze-->
+<!--    https://weblog.jamisbuck.org/2011/2/7/maze-generation-algorithm-recap-->
+<!--    https://en.wikipedia.org/wiki/Maze_generation_algorithm-->
+<!--    https://stackoverflow.com/questions/15981271/implement-maze-generation-algorithm-in-javascript-->
+<!--    https://stackoverflow.com/questions/47956494/html5-adding-an-image-as-a-canvas-element-->
+</head>
+<body>
+<div class="container" style="display: block;" id="container">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarToggleExternalContent" aria-controls="navbarToggleExternalContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+                <span >labyrinthe</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="alert alert-dark" role="alert" style="display: none" id="alert">
+        Le nom et le prenom sont obligatoires
+    </div>
+    <div class="row">
+        <div class="col-sm">
+            <div class="input-group mb-3">
+                <input type="text" id="nom" class="form-control" placeholder="Nom" aria-label="nom">
+                <span class="input-group-text">Nom</span>
+            </div>
+        </div>
+        <div class="col-sm">
+            <div class="input-group mb-3">
+                <input type="text" id="prenom"  class="form-control" placeholder="Prenom" aria-label="Prenom">
+                <span class="input-group-text">Prenom</span>
+            </div>
+        </div>
+    </div>
+
+        <div class="col-sm">
+            <label class="form-check-label">Difficulte</label>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="TypeE" value="Facile">
+                <label class="form-check-label">Facile</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="TypeE" value="Moyen" checked="checked">
+                <label class="form-check-label" >Moyen</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="TypeE" value="Difficile" >
+                <label class="form-check-label">Difficile</label>
+            </div>
+
+        </div>
+    </div>
+    <div style="text-align: center;" >
+        <button type="button" class="btn btn-primary-outline" onclick="play()">
+            <img id="start" src="https://www.pngfind.com/pngs/b/158-1584287_award-icon-png.png" height="40" width="40">
+        </button>
+    </div>
+    <div style="text-align: center; display: none" id="lab">
+        <canvas id="maze" width="600" height="600" style="text-align: center;" ></canvas><br/>
+        <button type="submit" class="btn btn-primary" id="showSol">Show Solution</button>
+        <button type="button" class="btn btn-primary" id="clear" onclick="clear()">Clear</button>
+    </div>
+</body>
+</html>
+
+
+<script>
+    Array.prototype.remove = function(from, to) {
+        let rest = this.slice((to || from) + 1 || this.length);
+        this.length = from < 0 ? this.length + from : from;
+        return this.push.apply(this, rest);
+    };
+
+    let Cell = function(x, y) {
+        this.x = x;
+        this.y = y;
+        this.visited = false;
+
+
+        this.parent = null;
+
+        this.heuristic = 0;
+
+        this.visit = function () {
+            this.visited = true;
+        };
+
+        this.score = function () {
+            let total = 0;
+            let p = this.parent;
+
+            while(p) {
+                ++total;
+                p = p.parent;
+            }
+            return total;
+        };
+
+        this.pathToOrigin = function () {
+            let path = [this];
+            let p = this.parent;
+
+            while(p) {
+                path.push(p);
+                p = p.parent;
+            }
+            path.reverse();
+
+            return path;
+        };
+    };
+
+    let Generator = function(rows, cols) {
+        this.graph = new Draw(rows, cols);
+        this.cellStack = [];
+
+        let self = this;
+
+        let recurse = function(cell) {
+            cell.visit();
+            let neighbors = self.graph.cellUnvisitedNeighbors(cell);
+            if(neighbors.length > 0) {
+                let randomNeighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+                self.cellStack.push(cell);
+                self.graph.removeEdgeBetween(cell, randomNeighbor);
+                recurse(randomNeighbor);
+            }
+            else {
+                let waitingCell = self.cellStack.pop();
+                if(waitingCell) {
+                    recurse(waitingCell);
+                }
+            }
+        };
+
+        this.solve = function() {
+            let closedSet = [];
+            let startCell = this.graph.getCellAt(0, 0); // top left cell
+            let targetCell = this.graph.getCellAt(this.graph.width - 1, this.graph.height - 1); // bottom right cell
+            let openSet = [startCell];
+            let searchCell = startCell;
+
+            while(openSet.length > 0) {
+                let neighbors = this.graph.cellDisconnectedNeighbors(searchCell);
+                for(let i = 0; i < neighbors.length; i ++) {
+                    let neighbor = neighbors[i];
+                    if(neighbor === targetCell) {
+                        neighbor.parent = searchCell;
+                        this.path = neighbor.pathToOrigin();
+                        openSet = [];
+                        return;
+                    }
+                    if(!_.include(closedSet, neighbor)) {
+                        if(!_.include(openSet, neighbor)) {
+                            openSet.push(neighbor);
+                            neighbor.parent = searchCell;
+                            neighbor.heuristic = neighbor.score() + this.graph.getCellDistance(neighbor, targetCell);
+                        }
+                    }
+                }
+                closedSet.push(searchCell);
+                openSet.remove(_.indexOf(openSet, searchCell));
+                searchCell = null;
+
+                _.each(openSet, function(cell) {
+                    if(!searchCell) {
+                        searchCell = cell;
+                    }
+                    else if(searchCell.heuristic > cell.heuristic) {
+                        searchCell = cell;
+                    }
+                });
+            }
+        };
+
+        this.generate = function() {
+            let initialCell = this.graph.getCellAt(0, 0);
+            recurse(initialCell);
+        };
+    };
+
+    let Draw = function(width, height) {
+        this.width = width;
+        this.height = height;
+        this.cells = [];
+        this.removedEdges = [];
+
+        let self = this;
+
+        this.getCellAt = function (x, y) {
+            if(x >= this.width || y >= this.height || x < 0 || y < 0) {
+                return null;
+            }
+            if(!this.cells[x]) {
+                return null;
+            }
+            return this.cells[x][y];
+        };
+
+        this.getCellDistance = function (cell1, cell2) {
+            let xDist = Math.abs(cell1.x - cell2.x);
+            let yDist = Math.abs(cell1.y - cell2.y);
+            return Math.sqrt(Math.pow(xDist, 2) + Math.pow(yDist, 2));
+        };
+
+        this.areConnected = function(cell1, cell2) {
+            if(!cell1 || !cell2) {
+                return false;
+            }
+            if(Math.abs(cell1.x - cell2.x) > 1 ||
+                Math.abs(cell1.y - cell2.y) > 1) {
+                return false;
+            }
+
+            let removedEdge = _.detect(this.removedEdges, function(edge) {
+                return _.include(edge, cell1) && _.include(edge, cell2);
+            });
+
+            return removedEdge === undefined;
+        };
+
+        this.cellUnvisitedNeighbors = function(cell) {
+            return _.select(this.cellConnectedNeighbors(cell), function(c) {
+                return !c.visited;
+            });
+        };
+
+        this.cellConnectedNeighbors = function(cell) {
+            return _.select(this.cellNeighbors(cell), function(c) {
+                return self.areConnected(cell, c);
+            });
+        };
+
+
+        this.cellDisconnectedNeighbors = function (cell) {
+            return _.reject(this.cellNeighbors(cell), function(c) {
+                return self.areConnected(cell, c);
+            });
+        }
+
+        this.cellNeighbors = function (cell) {
+            let neighbors = [];
+            let topCell = this.getCellAt(cell.x, cell.y - 1);
+            let rightCell = this.getCellAt(cell.x + 1, cell.y);
+            let bottomCell = this.getCellAt(cell.x, cell.y + 1);
+            let leftCell = this.getCellAt(cell.x - 1, cell.y);
+
+            if(cell.y > 0 && topCell) {
+                neighbors.push(topCell);
+            }
+            if(cell.x < this.width && rightCell) {
+                neighbors.push(rightCell);
+            }
+            if(cell.y < this.height && bottomCell) {
+                neighbors.push(bottomCell);
+            }
+            if(cell.x > 0 && leftCell) {
+                neighbors.push(leftCell);
+            }
+
+            return neighbors;
+        }
+
+        this.removeEdgeBetween = function(cell1, cell2) {
+            this.removedEdges.push([cell1, cell2]);
+        };
+
+        for(let i = 0; i < this.width; i++) {
+            this.cells.push([]);
+            row = this.cells[i];
+
+            for(let j = 0; j < this.height; j++) {
+                let cell = new Cell(i, j, this);
+                row.push(cell);
+            }
+        }
+    };
+
+    let Lab = function(doc, elemId) {
+        this.canvas = doc.getElementById(elemId);
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.ctx = this.canvas.getContext('2d');
+        this.diff = doc.getElementsByName('TypeE')
+        this.horizCells = 20;
+        this.vertCells = 20;
+        if (this.diff[0].checked){
+            this.horizCells = 10;
+            this.vertCells = 10;
+        }else if (this.diff[2].checked){
+            this.horizCells = 30;
+            this.vertCells = 30;
+        }
+
+        this.generator = new Generator(this.horizCells, this.vertCells);
+        this.cellWidth = this.width / this.horizCells;
+        this.cellHeight = this.height / this.vertCells;
+
+        let self = this;
+        self.ctx.strokeStyle = "rgb(0, 0, 0)";
+        self.ctx.fillStyle = "rgba(0,0,255,0.3)";
+
+
+        return {
+            width: function() {
+                return self.width;
+            },
+
+            height: function() {
+                return self.height;
+            },
+
+            generate: function () {
+                self.generator.generate();
+            },
+
+            draw: function() {
+                this.drawBorders();
+                this.drawMaze();
+            },
+
+            solve: function() {
+                self.generator.solve();
+                this.drawSolution();
+            },
+
+            drawBorders: function() {
+                this.drawLine(self.cellWidth, 0, self.width, 0);
+                this.drawLine(self.width, 0, self.width, self.height);
+                this.drawLine(self.width - self.cellWidth, self.height, 0, self.height);
+                this.drawLine(0, self.height, 0, 0);
+            },
+
+            drawSolution: function() {
+                let path = self.generator.path;
+
+                for(let i = 0; i < path.length; i++) {
+                    (function () {
+                        let cell = path[i];
+                        let x = cell.x * self.cellWidth;
+                        let y = cell.y * self.cellHeight;
+                        setTimeout(function() {
+                            self.ctx.fillRect(x, y, self.cellWidth, self.cellHeight);
+                        }, 80 * i);
+                    })();
+                }
+            },
+
+            drawMaze: function() {
+                let graph = self.generator.graph;
+                let drawnEdges = [];
+
+                let edgeAlreadyDrawn = function(cell1, cell2) {
+                    return _.detect(drawnEdges, function(edge) {
+                        return _.include(edge, cell1) && _.include(edge, cell2);
+                    }) !== undefined;
+                };
+
+                for(let i = 0; i < graph.width; i++) {
+                    for(let j = 0; j < graph.height; j++) {
+                        let cell = graph.cells[i][j];
+                        let topCell = graph.getCellAt(cell.x, cell.y - 1);
+                        let leftCell = graph.getCellAt(cell.x - 1, cell.y);
+                        let rightCell = graph.getCellAt(cell.x + 1, cell.y);
+                        let bottomCell = graph.getCellAt(cell.x, cell.y + 1);
+
+                        if(!edgeAlreadyDrawn(cell, topCell) && graph.areConnected(cell, topCell)) {
+                            let x1 = cell.x * self.cellWidth;
+                            let y1 = cell.y * self.cellHeight;
+                            let x2 = x1 + self.cellWidth;
+                            let y2 = y1;
+
+                            this.drawLine(x1, y1, x2, y2);
+                            drawnEdges.push([cell, topCell]);
+                        }
+
+                        if(!edgeAlreadyDrawn(cell, leftCell) && graph.areConnected(cell, leftCell)) {
+                            let x2 = x1;
+                            let y2 = y1 + self.cellHeight;
+
+                            this.drawLine(x1, y1, x2, y2);
+                            drawnEdges.push([cell, leftCell]);
+                        }
+
+                        if(!edgeAlreadyDrawn(cell, rightCell) && graph.areConnected(cell, rightCell)) {
+                            let x1 = (cell.x * self.cellWidth) + self.cellWidth;
+                            let y1 = cell.y * self.cellHeight;
+                            let x2 = x1;
+                            let y2 = y1 + self.cellHeight;
+
+                            this.drawLine(x1, y1, x2, y2);
+                            drawnEdges.push([cell, rightCell]);
+                        }
+
+                        if(!edgeAlreadyDrawn(cell, bottomCell) && graph.areConnected(cell, bottomCell)) {
+                            let x1 = cell.x * self.cellWidth;
+                            let y1 = (cell.y * self.cellHeight) + self.cellHeight;
+                            let x2 = x1 + self.cellWidth;
+                            let y2 = y1;
+
+                            this.drawLine(x1, y1, x2, y2);
+                            drawnEdges.push([cell, bottomCell]);
+                        }
+                    }
+                }
+            },
+
+            drawLine: function(x1, y1, x2, y2) {
+                self.ctx.beginPath();
+                self.ctx.moveTo(x1, y1);
+                self.ctx.lineTo(x2, y2);
+                self.ctx.stroke();
+            },
+
+            clear: function() {
+                self.ctx.clearRect(0, 0, self.width, self.height);
+            }
+        };
+    };
+
+
+
+</script>
+<script>
+    let lab;
+    function play() {
+        let nom = document.getElementById('nom').value;
+        let prenom = document.getElementById('prenom').value;
+        if (nom === "" && prenom === ""){
+            $("#alert").show();
+        }else{
+            $("#alert").hide();
+            $("#lab").show();
+            lab = new Lab(document, 'maze');
+            lab.clear();
+            lab.generate();
+            lab.draw();
+        }
+
+    }
+    $("#clear").on('click', function () {
+        lab.clear();
+    });
+
+    $("#showSol").show();
+    $(function() {
+        $('#showSol').click(function() {
+            lab.solve();
+        });
+    });
+</script>
